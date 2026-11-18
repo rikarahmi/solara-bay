@@ -48,22 +48,32 @@ function stealAndDrive(w, car, seconds) {
   input.keys.delete('KeyW');
 }
 
-// Put two traffic cars on the road ahead of the player, so the frame reads
-// as live traffic: one in the player's lane, one coming the other way.
+// Put three traffic cars on the road in the frame, so it reads as live
+// traffic: the shot camera sits ~11 m west of the car looking east, so cars
+// staged west of the player fall behind the lens. Stage them east instead —
+// one in the player's lane, one coming the other way, one further out —
+// plus a pedestrian on the right sidewalk (screen-right is +z here).
 function stageTrafficAhead(w) {
   const px = w.player.x;
   const pz = w.player.z;
-  const a = w.traffic.cars[0];
-  const b = w.traffic.cars[1];
-  if (a) {
-    a.x = px - 22; a.z = pz; a.heading = -Math.PI / 2; a.speed = 12;
-    a.group.position.set(a.x, 0, a.z);
-    a.group.rotation.y = a.heading;
+  const spots = [
+    { car: w.traffic.cars[0], x: px + 24, z: pz, heading: -Math.PI / 2, speed: 12 },
+    { car: w.traffic.cars[1], x: px + 42, z: pz - 7, heading: Math.PI / 2, speed: 11 },
+    { car: w.traffic.cars[2], x: px + 62, z: pz, heading: -Math.PI / 2, speed: 10 },
+  ];
+  for (const s of spots) {
+    if (!s.car) continue;
+    s.car.x = s.x; s.car.z = s.z; s.car.heading = s.heading; s.car.speed = s.speed;
+    s.car.group.position.set(s.x, 0, s.z);
+    s.car.group.rotation.y = s.heading;
   }
-  if (b) {
-    b.x = px - 40; b.z = pz - 7; b.heading = Math.PI / 2; b.speed = 11;
-    b.group.position.set(b.x, 0, b.z);
-    b.group.rotation.y = b.heading;
+  const ped = w.peds.find((p) => p.down <= 0);
+  if (ped) {
+    ped.x = px + 16; ped.z = pz + 8.5;
+    ped.tx = ped.x; ped.tz = ped.z;
+    ped.heading = Math.PI; // face the road
+    ped.mesh.position.set(ped.x, 0, ped.z);
+    ped.mesh.rotation.y = ped.heading;
   }
 }
 
@@ -102,12 +112,13 @@ export function stageShot(name, w) {
     input.keys.add('KeyW');
     for (let i = 0; i < CHASE_SECONDS / STEP; i += 1) w.step(STEP);
     input.keys.delete('KeyW');
-    // Fan the cops out behind the player, so the pursuit reads in the frame
-    // instead of hiding directly behind the player's car.
+    // Pull the cops in close behind the player's car, fanned across the
+    // road, so the pursuit reads in the frame instead of shrinking to
+    // specks far down the road.
     const px = w.player.x;
     const pz = w.player.z;
     w.police.cars.forEach((cop, i) => {
-      const spots = [[14, -8], [22, 7], [30, -2], [38, 6]];
+      const spots = [[5, -6], [9, 2], [13, -3]];
       const s = spots[i % spots.length];
       cop.x = px + s[0];
       cop.z = pz + s[1];
@@ -116,10 +127,11 @@ export function stageShot(name, w) {
       cop.group.position.set(cop.x, 0, cop.z);
       cop.group.rotation.y = cop.heading;
     });
-    // Head-on camera above the road centre: the player's car bears down on
-    // the lens with the pursuing cops visible on the road behind it. On the
-    // road centre the sightline is clear of poles and buildings.
-    w.render.camera.position.set(px - 20, 7.5, pz + 1);
+    // Low camera on the north side of the road (below the player's lane):
+    // from here the nearest lamp globe sits ~90° off the view axis, out of
+    // the frame, instead of looming a few metres from the lens as a white
+    // ball. The player's car stays in frame with the cops right behind it.
+    w.render.camera.position.set(px - 13, 5.0, pz - 6);
     w.render.camera.lookAt(px + 18, 1, pz - 1);
     w.render.draw();
     return 'playing';
