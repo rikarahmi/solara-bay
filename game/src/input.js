@@ -1,53 +1,58 @@
-// Keyboard and pointer input. Held keys give a steering direction; one-shot presses (start or
-// restart, pause) are queued as bit flags and taken once by the loop, so a press between two
-// frames is never lost and never counted twice.
-
-export const ACTION_CONFIRM = 1;
-export const ACTION_PAUSE = 2;
-
-const LEFT = new Set(['ArrowLeft', 'KeyA']);
-const RIGHT = new Set(['ArrowRight', 'KeyD']);
-const CONFIRM = new Set(['Space', 'Enter']);
-const PAUSE = new Set(['KeyP', 'Escape']);
-
-export function createInput(target) {
-  let left = false;
-  let right = false;
-  let actions = 0;
-
-  window.addEventListener('keydown', (event) => {
-    if (LEFT.has(event.code)) left = true;
-    else if (RIGHT.has(event.code)) right = true;
-    else if (CONFIRM.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_CONFIRM;
-    } else if (PAUSE.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_PAUSE;
-    } else return;
-    event.preventDefault();
-  });
-  window.addEventListener('keyup', (event) => {
-    if (LEFT.has(event.code)) left = false;
-    else if (RIGHT.has(event.code)) right = false;
-  });
-  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
-  window.addEventListener('blur', () => {
-    left = false;
-    right = false;
-  });
-  target.addEventListener('pointerdown', () => {
-    actions |= ACTION_CONFIRM;
-  });
-
-  return {
-    /** -1 for left, 1 for right, 0 for neither or both. */
-    direction() {
-      return (right ? 1 : 0) - (left ? 1 : 0);
+// Keyboard + mouse state. Pointer lock on click for real play; drag-to-look
+// as a fallback (and the only path in headless screenshots, which set the
+// camera directly instead). Scripted tests may write input.keys directly.
+export function createInput(canvas) {
+  const input = {
+    keys: new Set(),
+    lookDX: 0,
+    lookDY: 0,
+    dragging: false,
+    locked: false,
+    down(code) {
+      return input.keys.has(code);
     },
-    /** The one-shot presses since the last call, as ACTION_* flags. */
-    takeActions() {
-      const taken = actions;
-      actions = 0;
-      return taken;
+    consumeLook() {
+      const dx = input.lookDX;
+      const dy = input.lookDY;
+      input.lookDX = 0;
+      input.lookDY = 0;
+      return { dx, dy };
     },
   };
+
+  window.addEventListener('keydown', (e) => {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+    input.keys.add(e.code);
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
+  });
+  window.addEventListener('keyup', (e) => input.keys.delete(e.code));
+  window.addEventListener('blur', () => input.keys.clear());
+
+  canvas.addEventListener('mousedown', (e) => {
+    input.dragging = true;
+    input.lastX = e.clientX;
+    input.lastY = e.clientY;
+    if (canvas.requestPointerLock) {
+      try {
+        const p = canvas.requestPointerLock();
+        if (p && p.catch) p.catch(() => {});
+      } catch (_) { /* pointer lock unavailable; drag still works */ }
+    }
+  });
+  window.addEventListener('mouseup', () => { input.dragging = false; });
+  document.addEventListener('pointerlockchange', () => {
+    input.locked = document.pointerLockElement === canvas;
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (input.locked) {
+      input.lookDX += e.movementX;
+      input.lookDY += e.movementY;
+    } else if (input.dragging) {
+      input.lookDX += e.clientX - (input.lastX ?? e.clientX);
+      input.lookDY += e.clientY - (input.lastY ?? e.clientY);
+      input.lastX = e.clientX;
+      input.lastY = e.clientY;
+    }
+  });
+  return input;
 }

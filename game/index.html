@@ -3,17 +3,102 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<title>Solara Bay — Open-World Crime Game</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1430; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #eef1f5; }
   #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
   #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(16, 10, 32, 0.55); z-index: 20; }
+  .panel { background: rgba(20, 16, 36, 0.92); border: 1px solid #ffb020; border-radius: 14px; padding: 28px 34px; max-width: 640px; text-align: center; box-shadow: 0 12px 60px rgba(0,0,0,0.6); }
+  .panel h1 { margin: 0 0 4px; font-size: 54px; letter-spacing: 4px; color: #ffb020; text-shadow: 0 3px 0 #7a2e0e; }
+  .panel h2 { margin: 0 0 12px; font-size: 15px; letter-spacing: 3px; color: #7cc4ff; text-transform: uppercase; }
+  .panel p { font-size: 15px; line-height: 1.55; color: #d5dbe5; margin: 8px 0; }
+  .panel .controls { font-size: 13px; color: #aab2c2; line-height: 1.7; }
+  .panel button { margin: 14px 6px 0; padding: 12px 26px; font-size: 17px; font-weight: 700; border: none; border-radius: 8px; background: #ffb020; color: #241300; cursor: pointer; }
+  .panel button.secondary { background: #2a3040; color: #eef1f5; border: 1px solid #5a6a8a; }
+  .panel button:hover { filter: brightness(1.12); }
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; font-weight: 600; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+  .hud-box { position: absolute; background: rgba(12, 10, 24, 0.62); border-radius: 10px; padding: 10px 14px; }
+  #mission-box { top: 14px; left: 14px; max-width: 430px; }
+  #mission-title { color: #ffb020; font-size: 17px; letter-spacing: 1px; }
+  #mission-text { font-size: 15px; margin-top: 4px; line-height: 1.4; }
+  #mission-dist { color: #7cc4ff; font-size: 14px; margin-top: 2px; }
+  #cash { font-size: 24px; color: #7ae08a; margin-top: 6px; }
+  #right-box { top: 14px; right: 14px; text-align: right; min-width: 190px; }
+  #stars { font-size: 30px; letter-spacing: 3px; }
+  #health-bar { width: 180px; height: 12px; background: rgba(255,255,255,0.18); border-radius: 6px; margin-top: 6px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: #7ae08a; }
+  #health-label { font-size: 12px; color: #c8cede; margin-top: 3px; letter-spacing: 2px; }
+  #timer { font-size: 20px; margin-top: 6px; }
+  #speed-box { bottom: 14px; left: 14px; font-size: 22px; }
+  #hint { bottom: 14px; left: 50%; transform: translateX(-50%); font-size: 13px; color: #c8cede; white-space: nowrap; }
+  #minimap { position: absolute; right: 14px; bottom: 14px; width: 200px; height: 200px; border-radius: 10px; border: 2px solid rgba(255,255,255,0.35); background: #20242e; }
+  #compass { position: absolute; top: 14px; left: 50%; font-size: 26px; color: #39c2ff; transform: translateX(-50%); }
+  #toast { position: absolute; top: 96px; left: 50%; transform: translateX(-50%); background: rgba(12, 10, 24, 0.78); border: 1px solid #39c2ff; border-radius: 8px; padding: 10px 18px; font-size: 15px; max-width: 640px; text-align: center; opacity: 0; transition: opacity 0.4s; }
+  #banner { position: absolute; top: 34%; left: 0; right: 0; text-align: center; display: none; }
+  .banner-big { font-size: 72px; font-weight: 900; letter-spacing: 8px; color: #ff6a5a; text-shadow: 0 4px 0 rgba(0,0,0,0.6); }
+  .banner-sub { font-size: 18px; color: #eef1f5; margin-top: 8px; }
+  #end-title { font-size: 46px; letter-spacing: 3px; }
 </style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
+<canvas id="game" aria-label="Solara Bay: drive, steal cars, outrun the police and finish five missions in a sunset coastal city"></canvas>
 <p id="status" role="status" aria-live="polite"></p>
+
+<div id="hud" style="display:none">
+  <div id="mission-box" class="hud-box">
+    <div id="mission-title">Mission 1 — First Wheels</div>
+    <div id="mission-text"></div>
+    <div id="mission-dist"></div>
+    <div id="cash">$0</div>
+  </div>
+  <div id="right-box" class="hud-box">
+    <div id="stars">☆☆☆☆☆</div>
+    <div id="health-bar"><div id="health-fill"></div></div>
+    <div id="health-label">HEALTH</div>
+    <div id="timer"></div>
+  </div>
+  <div id="speed-box" class="hud-box"><span id="speed">On foot</span></div>
+  <div id="hint" class="hud-box">WASD drive / walk · E enter car · F punch · Click shoot · Shift run · P pause · M mute · R restart</div>
+  <canvas id="minimap" width="200" height="200"></canvas>
+  <div id="compass">▲</div>
+  <div id="toast"></div>
+  <div id="banner"></div>
+</div>
+
+<div id="title-screen" class="overlay">
+  <div class="panel">
+    <h1>SOLARA BAY</h1>
+    <h2>An open-world crime story at sunset</h2>
+    <p>You are <b>Dario Solis</b>, a driver new in Solara Bay. Fixer <b>Lena Marlowe</b> has five jobs for you — steal cars, run packages, dodge the Bay PD — from Coral Plaza to Lighthouse Point.</p>
+    <p>Explore the city on foot and by car. Traffic, pedestrians, police chases, a wanted level, combat, missions and a save that keeps your progress.</p>
+    <p class="controls">WASD / arrows — walk &amp; drive &nbsp;·&nbsp; E — enter / leave a car &nbsp;·&nbsp; F — punch &nbsp;·&nbsp; Click — shoot<br>Shift — run &nbsp;·&nbsp; Mouse — look around &nbsp;·&nbsp; P — pause &nbsp;·&nbsp; M — mute &nbsp;·&nbsp; R — restart mission</p>
+    <button id="btn-start">New Game</button>
+    <button id="btn-continue" class="secondary" style="display:none">Continue</button>
+  </div>
+</div>
+
+<div id="pause-screen" class="overlay" style="display:none">
+  <div class="panel">
+    <h1 style="font-size:40px">PAUSED</h1>
+    <p>The bay waits for you.</p>
+    <button id="btn-resume">Resume</button>
+    <button id="btn-restart" class="secondary">Restart Mission</button>
+    <button id="btn-title" class="secondary">Title Screen</button>
+  </div>
+</div>
+
+<div id="end-screen" class="overlay" style="display:none">
+  <div class="panel">
+    <h1 id="end-title">WASTED</h1>
+    <p id="end-text"></p>
+    <button id="btn-restart">Try Again</button>
+  </div>
+</div>
+
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>
